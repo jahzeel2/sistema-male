@@ -43,34 +43,25 @@ class VentaController extends Controller
         return view('ventas.venta.index');
     }
 
-    public function create()
+     public function create()
     { 
         $datecontry = Carbon::now('America/Mexico_City');
         $datenow = $datecontry->toDateString();
         $id  = Auth::id();
         $cliente = DB::table('clientes')->where('idcliente', '=', 1)->get();
-        //dd($cliente);
-        //$folio = $this->folioid();
         $nomcliente = $cliente[0]->nombre;
         $clienteid = $cliente[0]->idcliente;
         
         $apertura = DB::select('select * from aperturacajas where user_id="'.$id.'" AND estatus="Abierta" AND CAST(fecha_hora AS DATE) = ?', [$datenow]);
-        //$idaper = $apertura
-        //$folio = $id;
         
-        //$tipo_view = "sidebar-collapse";
         if ($apertura) {
             $ape = $apertura[0]->idapertura;
             $estatus = $apertura[0]->estatus;
             $folio = $this->folioid($ape);
-            //dd($ape);
-            //$folio = $this->year.$this->month.$this->day.$ape;
             return view("ventas.venta.create",["nomcliente"=>$nomcliente, "clienteid"=>$clienteid, "folio"=>$folio, "apertura"=>$ape, "estatus"=>$estatus]);
         }else{
-             
             return view("ventas.venta.create",["nomcliente"=>$nomcliente, "clienteid"=>$clienteid, "folio"=>0, "apertura"=>0, "estatus"=>"Cerrada"]);
         }    
-       
     }
 
     protected function folioid($ape){
@@ -81,14 +72,8 @@ class VentaController extends Controller
         $seriefolio= $arrayfolio[0]->seriefolio;
         $confolio = $arrayfolio[0]->numfolio;
         return $newfolio = $seriefolio.$confolio;
-        /*$ultimo_folio = DB::table('ventas')
-        ->select('idventa')
-        ->orderby('idventa','DESC')->take(1)->get();
-        $arrayultimo = $ultimo_folio[0]->idventa+1;
-        return $folioid = "00".$arrayultimo;*/
     }
 
-    /**OBTIENE EL FOLIO SIGUIENTE DE LA VENTA */
     protected function nowfolioid($ape,$num){
         $arrayfolio = DB::table('corte_cajero_dia')
         ->select('numfolio')
@@ -101,7 +86,6 @@ class VentaController extends Controller
     public function store(Request $request)
     {
         try {
-          
             DB::beginTransaction();
             $rules = [
                 'ventidcliente' => 'required',
@@ -110,7 +94,6 @@ class VentaController extends Controller
                 'venttotal_venta' => 'required|min:2',
                 'ventdinero' => 'required',
                 'ventsuelto' => 'required'
-                // 'pcantidad' => 'required' 
             ];
             $messages = [
                 'ventidcliente.required' => 'El nombre de el cliente es requerido',
@@ -120,8 +103,6 @@ class VentaController extends Controller
                 'venttotal_venta.min' => 'El total de la venta debe de se mayor a 0',
                 'ventdinero.required' => 'La cantidad de dinero para la venta es requerido $',
                 'ventsuelto.required' => 'La cantidad que se ingreso es menor a la cantidad total de la venta',
-                //'ventfolio.required' => 'El total de la venta es requerido'
-                // 'pcantidad.required' => 'La cantidad es requerida',
             ];
 
             $validator = Validator::make($request->all(), $rules, $messages);
@@ -134,9 +115,7 @@ class VentaController extends Controller
                 ]);
             }
            
-            /**ID DEL USUARIO QUIEN REALIZA LA VENTA*/
             $id_user_venta =  $request->id_user_vent;
-            /**se guardan los datos de la tabla Ventas en la DB */
             $venta = new Venta_producto();
             $venta->user_id = $id_user_venta;
             $venta->cliente_id = $request->ventidcliente;            
@@ -148,7 +127,7 @@ class VentaController extends Controller
             $venta->total_venta=str_replace(' ', '', $request->venttotal_venta);            
             $venta->estado= "Activo";
             $venta->save();
-            /**se guardan los datos de la tabla detalle_ventas en la DB*/
+            
             $idarticulo=$request->idarticulo;
             $cantidad=$request->cantidad;
             $precio_venta=$request->precio_venta;
@@ -159,23 +138,21 @@ class VentaController extends Controller
             $cont = 0;
             
             while ($cont < count($idarticulo)) {
-            $detalle = new Detalle_venta_producto();
-            $detalle->venta_id=$venta->idventa;
-            $detalle->articulo_id=$idarticulo[$cont];
-            $detalle->apertura_id=$request->inicioapertura;
-            $detalle->cantidad=$cantidad[$cont];
-            $detalle->precio_venta=$precio_venta[$cont];
-            $detalle->descuento=$descuento[$cont];
-            $detalle->subtotal=$subtotal[$cont];
-            $detalle->save();
-            $cont=$cont+1;
-                                    
+                $detalle = new Detalle_venta_producto();
+                $detalle->venta_id=$venta->idventa;
+                $detalle->articulo_id=$idarticulo[$cont];
+                $detalle->apertura_id=$request->inicioapertura;
+                $detalle->cantidad=$cantidad[$cont];
+                $detalle->precio_venta=$precio_venta[$cont];
+                $detalle->descuento=$descuento[$cont];
+                $detalle->subtotal=$subtotal[$cont];
+                $detalle->save();
+                $cont=$cont+1;
             }
-            /**una vez que se guardaron los articulos se procede a eliminarlos de la base temporal*/
+            
             $cod_user= $id_user_venta;  
-            /**se guardan los datos de la tabla Ventas en la DB */
             $eliminar_registros = DB::delete('delete from detalle_venta_temp where id_user= ?', [$cod_user]);
-            /**function that call the new folio*/
+            
             $num = 1;
             $ape = $request->inicioapertura;
             $folionow = $this->nowfolioid($ape,$num);
@@ -183,7 +160,7 @@ class VentaController extends Controller
             $updatefolio = DB::table('corte_cajero_dia')
             ->where('apertura_id',$request->inicioapertura)
             ->update(['numfolio' => $newfolio]);
-            /**function that get  details sales of sale*/
+            
             $id_now_sale =  $venta->idventa;
             $now_sale = $this->detalle_venta($id_now_sale);
             $folio = $this->folioid($ape);
@@ -209,27 +186,19 @@ class VentaController extends Controller
                 'user' => $users,
             ]);
 
-          
         } catch (\Throwable $th) {
-            /**SI OCURREO UN ERROR EN LA VENTA*/
             DB::rollback();
             $m = 'Excepción capturada: '.$th->getMessage(). "\n";
             return response()->json([
                 'estado'=> 0,  
                 'mensaje' => (array) $m,
-                //'idcod'=>$idapertura
             ]);
-
-
         }
-
     }
 
     public function find_product(Request $request)
     {
-
         $searchproducto = $request->valor;
-
         $producto = DB::table('productos')
         ->where([
             ['nombre','like','%'.$searchproducto.'%'],
@@ -242,10 +211,6 @@ class VentaController extends Controller
         ->limit(5)
         ->get();
 
-        /*$getventas = DB::table('ventas')->where([
-            ['user_id','=',$id],
-            ['estado','=','Activo'],
-        ])->get();*/
         $array_pro = [];
         foreach ($producto as $tag) {
             $id = $tag->idarticulo;
@@ -263,31 +228,6 @@ class VentaController extends Controller
             'alldata' => $array_pro,
             'modulo' => "venta"
         ]);
-        /*$nombre = $request->nombre;
-        $term = trim($request->q);
-
-        if (empty($term)) {
-            return Response::json([]);
-        }
-
-        $producto = DB::table('productos')
-        ->where('nombre','like','%'.$term.'%')
-        ->orwhere('codigo','like','%'.$term.'%')
-        ->get();
-        $array_tags = [];
-        foreach ($producto as $tag) {
-            $id = $tag->idarticulo;
-            $codigo = $tag->codigo;
-            $nombre = $tag->nombre;
-            $iva = $tag->iva;
-            $stock= $tag->stock;
-            $venta = $tag->pventa;
-            $descuento = $tag->descuento; 
-            $img = "/imagenes/articulos/".$tag->imagen;
-            $array_tags[]=['id'=>$id,'codigo'=>$codigo,'nombre'=>$nombre,'img'=>$img,'iva'=>$iva,'venta'=>$venta,'stock'=>$stock,"descuento"=>$descuento];
-        }
-        
-        return Response::json($array_tags);*/
     }
 
     public function save_product_temp(Request $request)
@@ -313,7 +253,6 @@ class VentaController extends Controller
             'pvstock.required' => 'El stock es requerido',
             'pvprecio_venta.required' => 'El precio de venta es requerido',
             'pvdescuento.required' => 'El descuento es requerido',
-            
         ];
         $validator = Validator::make($request->all(), $rules, $messages);
         if ($validator->fails()) {  
@@ -327,69 +266,30 @@ class VentaController extends Controller
         
         try {
             DB::beginTransaction();
-            $nombre = $request->NombreArticulo;
+            $iduser= $request->cod_user;
             $idarticulo= $request->idarticulo;
             $codigo= $request->CodigoArticulo;
-            $iva= $request->iva;
-            $iduser= $request->cod_user;
+            $nombre = $request->NombreArticulo;
             $cantidad= $request->pvcantidad;
-            $stock= $request->pvstock;
             $pventa= $request->pvprecio_venta;
             $descuento= $request->pvdescuento;
+            $iva= $request->iva;
 
-            $datos= DB::select("call add_detalle_venta_temp($iduser,$idarticulo,'$codigo','$nombre',$cantidad,$pventa,$descuento,$iva)");
-            $detalleTabla = '';
-            $sub_total = 0;
-            $iva = 0;
-            $total= 0;
-            $desc_producto = 0;
-            $subtotal_producto_global = 0;
-            //VARIABLES IVA POR PRODUCTO
-            $des_iva = 0;
-            $total_iva = 0;
-            /////////////////////////////
-                $array_productos = [];
-                foreach ($datos as $productos) {
-                    /**se obtiene el total del descuento del producto*/
-                    $desc_producto = round($productos->total_articulos * $productos->descuento,2);
-                    /**se obtiene el total menos el descuento*/
-                    $precio_total= round($productos->total_articulos * $productos->precio - $desc_producto,2);
-                    $total_format = number_format($precio_total, 2, '.', ' ');
-                    $sub_total = round($sub_total+$precio_total,2);
-                    $total = round($total+$precio_total,2);
-                    /**se obtiene el iva del producto si lleva*/
-                    $des_iva = round($precio_total * ($productos->iva / 100),2);
-                    $total_iva = round($total_iva+$des_iva,2);
-                    /**se suma el precio total mas iva para sagar la venta global del producto*/
-                    $subtotal_producto_global = round($precio_total + $des_iva,2);
-                    /**variables*/
-                    $idart = $productos->iddetalletemp;
-                    $nombre = $productos->nombre;
-                    $cantidad = $productos->total_articulos;
-                    $precio = $productos->precio;
-                    $descuento = $productos->descuento;
-                    $id_producto = $productos->idarticulo; 
-
-                    $array_productos[] = ["idart"=>$idart, "id_articulo"=>$id_producto,'precio_total'=>$precio_total, "subtotal"=>$sub_total,"total"=>$total,"nombre"=>$nombre,"cantidad"=>$cantidad, "precio"=>$precio, "des_iva"=>$des_iva, "descuento"=>$descuento, "desc_producto"=>$desc_producto, "subtotal_global"=>$subtotal_producto_global, "total_format"=>$total_format];
-                }
-                
-            $impuesto = round($sub_total * (16 / 100),2);
-            $total_siva = round($sub_total-$impuesto, 2);
-            $total = number_format(round($total_siva + $impuesto,2),2, '.', ' ');
-
-                
-            $array_totales = [];
-            $array_totales = ["total_siva"=>$total_siva, "impuesto"=>$impuesto, "total"=>$total, "total_iva"=>$total_iva];
-            
+            DB::select("call add_detalle_venta_temp($iduser,$idarticulo,'$codigo','$nombre',$cantidad,$pventa,$descuento,$iva)");
             DB::commit();
+
+            // Se llama a la nueva función centralizada para calcular los totales
+            $results = $this->_calculateTempTotals($iduser);
             
-            if ($datos) {
-            return response()->json([
-                "estado" => 1,
-                "resultado"=>$datos,
-                "productos"=>$array_productos,
-                "totales"=>$array_totales
+            if ($results['datos']->isNotEmpty()) {
+                return response()->json([
+                    "estado" => 1,
+                    "resultado"=> $results['datos'],
+                    "productos"=> $results['productos'],
+                    "totales"=> $results['totales']
                 ]);
+            } else {
+                 return response()->json([ "estado" => 0, "mensaje"=> "No se encontraron productos." ]);
             }
  
         } catch (\Throwable $th) {
@@ -399,148 +299,60 @@ class VentaController extends Controller
                 "estado" => 0,
                 "mensaje"=> (array) $m
             ]);
-
         }
-
     }
 
     public function show_vent_prod_tmp(Request $request)
     {
         try {
-            
-
             $id_user = $request->id_user;
-            $datos=DB::table('detalle_venta_temp')
-            ->select('*',DB::raw('SUM(cantidad) as total_articulos')) 
-            ->where('id_user','=',$id_user)
-            ->groupBy('idarticulo')
-            ->orderByDesc('iddetalletemp')
-            ->get();
-            $detalleTabla = '';
-                $sub_total = 0;
-                $iva = 0;
-                $total= 0;
-                $desc_producto = 0;
-                $subtotal_producto_global = 0;
-                //VARIABLES IVA POR PRODUCTO
-                $des_iva = 0;
-                $total_iva = 0;
-                /////////////////////////////
-                $array_productos = [];
-                foreach ($datos as $productos) {
-                    /**se obtiene el total del descuento del producto*/
-                    $desc_producto = round($productos->total_articulos * $productos->descuento,2);
-                    /**se obtiene el total menos el descuento*/
-                    $precio_total = round($productos->total_articulos * $productos->precio - $desc_producto,2);
-                    $total_format = number_format($precio_total, 2, '.', ' ');
-                    $sub_total = round($sub_total+$precio_total,2);
-                    $total = round($total+$precio_total,2);
-                    /**se obtiene el iva del producto si lleva*/
-                    $des_iva = round($precio_total * ($productos->iva / 100),2);
-                    $total_iva = round($total_iva+$des_iva,2);
-                    /**se suma el precio total mas iva para sagar la venta global del producto*/
-                    $subtotal_producto_global = round($precio_total + $des_iva,2);
-                    /**variables*/
-                    $idart = $productos->iddetalletemp;
-                    $nombre = $productos->nombre;
-                    $cantidad = $productos->total_articulos;
-                    $precio = $productos->precio;
-                    $descuento = $productos->descuento;
-                    $id_producto = $productos->idarticulo;
+            // Se llama a la nueva función centralizada para calcular los totales
+            $results = $this->_calculateTempTotals($id_user);
 
-                    $array_productos[] = ["idart"=>$idart, "id_articulo"=>$id_producto,'precio_total'=>$precio_total, "subtotal"=>$sub_total,"total"=>$total,"nombre"=>$nombre,"cantidad"=>$cantidad, "precio"=>$precio, "des_iva"=>$des_iva, "descuento"=>$descuento, "desc_producto"=>$desc_producto, "subtotal_global"=>$subtotal_producto_global, "total_format"=>$total_format];
-                }
-                
-                $impuesto = round($sub_total * (16 / 100),2);
-                $total_siva = round($sub_total-$impuesto, 2);
-                $total = number_format(round($total_siva + $impuesto,2), 2, '.', ' ');
-
-                
-                $array_totales = [];
-                $array_totales = ["total_siva"=>$total_siva, "impuesto"=>$impuesto, "total"=>$total, "total_iva"=>$total_iva];
-
-                if ($datos) {
-                    return response()->json([
+            if ($results['datos']->isNotEmpty()) {
+                return response()->json([
                     "estado" => 1,
-                    "resultado"=>$datos,
-                    "productos"=>$array_productos,
-                    "totales"=>$array_totales
-                    ]);
-                }
+                    "resultado"=> $results['datos'],
+                    "productos"=> $results['productos'],
+                    "totales"=> $results['totales']
+                ]);
+            } else {
+                // Si no hay productos, se devuelve un estado especial para que el frontend lo maneje
+                return response()->json(["estado" => "sinproductos"]);
+            }
         } catch (\Throwable $th) {
             $m = 'Excepción capturada: '.$th->getMessage(). "\n";
             return response()->json([
                 "estado" => 0,
                 "mensaje"=> (array) $m
             ]);
-
         }
     }
     
     public function delete_venta_product(Request $request)
     {
         try {
-            
             $id_user_temp = $request->id_user;
             $id_detalle_articulo_temp = $request->idprod;
             $id_articulo = $request->idArticulo;
 
-            $datos = DB::select("call delete_detalle_venta_temp($id_detalle_articulo_temp, $id_user_temp,$id_articulo)");
-            $detalleTabla = '';
-                $sub_total = 0;
-                $iva = 0;
-                $total= 0;
-                $desc_producto = 0;
-                $subtotal_producto_global = 0;
-                //VARIABLES IVA POR PRODUCTO
-                $des_iva = 0;
-                $total_iva = 0;
-                /////////////////////////////
-                $array_productos = [];
-                foreach ($datos as $productos) {
-                    /**se obtiene el total del descuento del producto*/
-                    $desc_producto = round($productos->total_articulos * $productos->descuento,2);
-                    /**se obtiene el total menos el descuento*/
-                    $precio_total= round($productos->total_articulos * $productos->precio - $desc_producto,2);
-                    $total_format = number_format($precio_total, 2, '.', ' ');
-                    $sub_total = round($sub_total+$precio_total,2);
-                    $total = round($total+$precio_total,2);
-                    /**se obtiene el iva del producto si lleva*/
-                    $des_iva = round($precio_total * ($productos->iva / 100),2);
-                    $total_iva = round($total_iva+$des_iva,2);
-                    /**se suma el precio total mas iva para sagar la venta global del producto*/
-                    $subtotal_producto_global = round($precio_total + $des_iva,2);
-                    /**variables*/
-                    $idart = $productos->iddetalletemp;
-                    $nombre = $productos->nombre;
-                    $cantidad = $productos->total_articulos;
-                    $precio = $productos->precio;
-                    $descuento = $productos->descuento;
-                    $id_producto = $productos->idarticulo;
+            DB::select("call delete_detalle_venta_temp($id_detalle_articulo_temp, $id_user_temp,$id_articulo)");
+            
+            // Se llama a la nueva función centralizada para calcular los totales
+            $results = $this->_calculateTempTotals($id_user_temp);
 
-                    $array_productos[] = ["idart"=>$idart, "id_articulo"=>$id_producto,'precio_total'=>$precio_total, "subtotal"=>$sub_total,"total"=>$total,"nombre"=>$nombre,"cantidad"=>$cantidad, "precio"=>$precio, "des_iva"=>$des_iva, "descuento"=>$descuento, "desc_producto"=>$desc_producto, "subtotal_global"=>$subtotal_producto_global, "total_format"=>$total_format];
-                }
-                
-                $impuesto = round($sub_total * (16 / 100),2);
-                $total_siva = round($sub_total-$impuesto, 2);
-                $total = number_format(round($total_siva + $impuesto,2), 2, '.', ' ');
-                
-                $array_totales = [];
-                $array_totales = ["total_siva"=>$total_siva, "impuesto"=>$impuesto, "total"=>$total, "total_iva"=>$total_iva];
-
-                if ($datos != "") {
-                    return response()->json([
+            if ($results['datos']->isNotEmpty()) {
+                return response()->json([
                     "estado" => 1,
-                    "resultado"=>$datos,
-                    "productos"=>$array_productos,
-                    "totales"=>$array_totales
-                    ]);
-                }
-                if($datos == ""){
-                    return response()->json([
-                        "estado"=>"sinproductos"
-                    ]);
-                }
+                    "resultado"=> $results['datos'],
+                    "productos"=> $results['productos'],
+                    "totales"=> $results['totales']
+                ]);
+            } else {
+                return response()->json([
+                    "estado"=>"sinproductos"
+                ]);
+            }
         } catch (\Throwable $th) {
             $m = 'Excepción capturada: '.$th->getMessage(). "\n";
             return response()->json([
@@ -548,10 +360,86 @@ class VentaController extends Controller
                 "mensaje"=> (array) $m
             ]);
         }        
-
-     
     }
     
+    /**
+     * NUEVO MÉTODO PRIVADO PARA CENTRALIZAR EL CÁLCULO DE TOTALES DEL CARRITO TEMPORAL
+     * Esta función calcula el precio final aplicando el descuento porcentual.
+     */
+    private function _calculateTempTotals($id_user)
+    {
+        // 1. Obtener los productos agrupados de la tabla temporal
+        $datos = DB::table('detalle_venta_temp')
+            ->select('*', DB::raw('SUM(cantidad) as total_articulos'))
+            ->where('id_user', '=', $id_user)
+            ->groupBy('idarticulo')
+            ->orderByDesc('iddetalletemp')
+            ->get();
+
+        $sub_total = 0;
+        $total_iva = 0;
+        $array_productos = [];
+
+        // 2. Iterar sobre cada línea de producto para calcular los importes
+        foreach ($datos as $productos) {
+            // --- INICIO DE LA LÓGICA DE CÁLCULO CORREGIDA ---
+
+            // Precio de la línea sin aplicar descuentos (Cantidad * Precio Unitario)
+            $precio_linea_sin_descuento = $productos->total_articulos * $productos->precio;
+
+            // Monto del descuento (ej: $1000 * (20 / 100) = $200 de descuento)
+            $monto_descuento = $precio_linea_sin_descuento * ($productos->descuento / 100);
+
+            // Precio final de la línea restando el monto del descuento
+            $precio_total_linea = $precio_linea_sin_descuento - $monto_descuento;
+            
+            // --- FIN DE LA LÓGICA DE CÁLCULO ---
+
+            $total_format = number_format($precio_total_linea, 2, '.', ' ');
+            $sub_total += $precio_total_linea;
+
+            // Calcular el IVA sobre el precio ya con descuento
+            $des_iva = round($precio_total_linea * ($productos->iva / 100), 2);
+            $total_iva += $des_iva;
+
+            // Sumar el precio total más el IVA para la venta global del producto
+            $subtotal_producto_global = round($precio_total_linea + $des_iva, 2);
+
+            $array_productos[] = [
+                "idart" => $productos->iddetalletemp,
+                "id_articulo" => $productos->idarticulo,
+                'precio_total' => $precio_total_linea, // Este es el importe final de la línea
+                "nombre" => $productos->nombre,
+                "cantidad" => $productos->total_articulos,
+                "precio" => $productos->precio,
+                "des_iva" => $des_iva,
+                "descuento" => $productos->descuento, // Se mantiene el % para mostrarlo en la vista
+                "desc_producto" => round($monto_descuento, 2), // Este es el monto de dinero descontado
+                "subtotal_global" => $subtotal_producto_global,
+                "total_format" => $total_format
+            ];
+        }
+            
+        // 3. Calcular los totales generales de la venta
+        $impuesto = round($sub_total * (16 / 100), 2); // Asumiendo un 16% de impuesto general
+        $total_siva = round($sub_total - $impuesto, 2);
+        $total_final = number_format(round($sub_total + $total_iva, 2), 2, '.', ' '); // Total final es subtotal + IVA de cada producto
+
+        $array_totales = [
+            "total_siva" => $total_siva,
+            "impuesto" => $impuesto,
+            "total" => $total_final,
+            "total_iva" => round($total_iva, 2)
+        ];
+        
+        // 4. Devolver todos los datos calculados
+        return [
+            'datos' => $datos,
+            'productos' => $array_productos,
+            'totales' => $array_totales
+        ];
+    }
+
     public function delete_venta_general(Request $request)
     {
         try {
@@ -568,7 +456,6 @@ class VentaController extends Controller
                 'estado'=> 0,  
                 'mensaje' => (array) $m
             ]);
-           
         }
     }
     
@@ -576,11 +463,7 @@ class VentaController extends Controller
     {
         $id  = Auth::id();
         $now = $this->datenow;
-        /*$getventas = DB::table('ventas')->where([
-            ['user_id','=',$id],
-            ['estado','=','Activo'],
-        ])->get();*/
-
+        
         $tipo_user = DB::table('users')
         ->join('role_user', 'users.id', '=', 'role_user.user_id')
         ->join('roles', 'roles.id', '=', 'role_user.role_id')
@@ -591,8 +474,8 @@ class VentaController extends Controller
         $access = $tipo_user[0]->access;
         
         $getapertura = DB::table('aperturacajas')->where([
-        ['user_id','=',$id],  
-        ['estatus','=','Abierta'],
+            ['user_id','=',$id],  
+            ['estatus','=','Abierta'],
         ])
         ->whereRaw("CAST(fecha_hora AS DATE) ='$now'")
         ->get();
@@ -600,7 +483,6 @@ class VentaController extends Controller
         switch ($access) {
             case 'yes':
                 $geventasadmin = DB::table('ventas')->where('estado','=', 'Activo')->get();
-                //dd($geventasadmin);
                 return DataTables::of($geventasadmin)
                 ->addColumn('action', function($geventasadmin){
                     $id = $geventasadmin->idventa;
@@ -610,7 +492,6 @@ class VentaController extends Controller
                     <button type="button" class="btn btn-secondary btn-sm" onclick="obtener_print_detalle_venta('.$id.');" ><i class="fa fa-print" aria-hidden="true"></i></button>
                     </div>
                     ';
-
                     return $button;
                 })
                 ->rawColumns(['action'])
@@ -618,7 +499,6 @@ class VentaController extends Controller
             break;
             case 'no':
                 if(count($getapertura) >= 1) {
-            
                     $idapertura = $getapertura[0]->idapertura;
                     $ventaonly = DB::select('select venta_id from detalle_ventas where apertura_id="'.$idapertura.'" group by venta_id having count(*) >=1');
                     $arr = [];
@@ -632,7 +512,6 @@ class VentaController extends Controller
                         $total_venta= $getv[0]->total_venta;
                         $estado= $getv[0]->estado;
                         $arr[]=["idventa"=>$idventa,"fecha_hora"=>$fecha_hora,"num_folio"=>$num_folio,"tipo_comprobante"=>$tipo_comprobante,"total_venta"=>$total_venta,"estado"=>$estado];
-                
                     }
                     return DataTables::of($arr)
                     ->addColumn('action', function($arr){
@@ -664,70 +543,13 @@ class VentaController extends Controller
                     ->make(true);
                 }
             break;
-            
             default:
-                # code...
                 break;
         }
-        /*************************************************** */
-        /*if(count($getapertura) >= 1) {
-            
-            $idapertura = $getapertura[0]->idapertura;
-
-            $ventaonly = DB::select('select venta_id from detalle_ventas where apertura_id="'.$idapertura.'" group by venta_id having count(*) >=1');
-            $arr = [];
-            foreach ($ventaonly as $vent) {
-                $idv = $vent->venta_id;
-                $getv = DB::table('ventas')->where('idventa','=',$idv)->get();
-                $idventa = $getv[0]->idventa;
-                $fecha_hora= $getv[0]->fecha_hora;
-                $num_folio= $getv[0]->num_folio;
-                $tipo_comprobante= $getv[0]->tipo_comprobante;
-                $total_venta= $getv[0]->total_venta;
-                $estado= $getv[0]->estado;
-                $arr[]=["idventa"=>$idventa,"fecha_hora"=>$fecha_hora,"num_folio"=>$num_folio,"tipo_comprobante"=>$tipo_comprobante,"total_venta"=>$total_venta,"estado"=>$estado];
-                
-            }
-            return DataTables::of($arr)
-            ->addColumn('action', function($arr){
-                $id = $arr["idventa"];
-                $button = '<button type="button" class="btn btn-info btn-sm" onclick="obtener_detalle_venta('.$id.');" ><i class="fa fa-eye" aria-hidden="true"></i></button>';
-                return $button;
-            })
-            ->rawColumns(['action'])
-            ->make(true);
-        }else{
-            $idapertura = 0;
-            $getventass=DB::table('ventas as v')
-            ->join('detalle_ventas as dv', 'v.idventa','=','dv.venta_id')
-            ->where('dv.apertura_id','=',$idapertura)
-            ->get();
-
-            return DataTables::of($getventass)
-            ->addColumn('action', function(){
-                $id = 0;
-                $button = '<button type="button" class="btn btn-info btn-sm" onclick="obtener_detalle_venta('.$id.');" ><i class="fa fa-eye" aria-hidden="true"></i></button>';
-                return $button;
-            })
-            ->rawColumns(['action'])
-            ->make(true);
-        }*/
-        
     }
 
     public function show_edit($id)
     {
-        /*$getventadetalle=DB::table('ventas as v')
-        ->join('proveedores as p', 'v.cliente_id','=','p.idproveedor')
-        ->join('detalle_ventas as dv','v.idventa','=','dv.venta_id')
-        ->select('v.idventa','v.fecha_hora','p.nombre','v.tipo_comprobante','v.num_folio','v.estado','v.total_venta')
-        ->where('v.idventa','=',$id)
-        ->first();
-        $detalles=DB::table('detalle_ventas as d')
-        ->join('productos as a','d.articulo_id','=','a.idarticulo')
-        ->select('a.nombre as articulo','d.cantidad','d.descuento','d.precio_venta','d.subtotal')
-        ->where('d.venta_id','=',$id)
-        ->get();*/
         $getventadetalle=DB::table('ventas as v')
         ->join('clientes as c', 'v.cliente_id','=','c.idcliente')
         ->join('detalle_ventas as dv','v.idventa','=','dv.venta_id')
@@ -740,10 +562,6 @@ class VentaController extends Controller
         ->where('d.venta_id','=',$id)
         ->get();
         return response()->json(['result'=>$getventadetalle,'detalles'=>$detalles]);
-        /*$where = array('idventa'=>$id);
-        $venta = Venta_producto::where($where)->first();
-        return Response::json($venta);*/
-
     }
 
     public function showDetailPrint($id)
@@ -765,7 +583,6 @@ class VentaController extends Controller
             'detalles'=>$detalles,
             'settings'=>$settings,
         ]);
-
     }
 
     protected function detalle_venta($id_now_sale)
@@ -792,7 +609,7 @@ class VentaController extends Controller
     {
         $getData = json_decode($data, true);
         $settings = DB::table('configuracion')->where('id', 1)->first();
-        $id_now_sale = $getData['idventa'];//695;
+        $id_now_sale = $getData['idventa'];
         $now_sale = $this->detalle_venta($id_now_sale);
         $sale = $now_sale['sale'];
         $detail = $now_sale['detail'];
@@ -800,17 +617,15 @@ class VentaController extends Controller
         $efectivo = $getData['efectivo'];
 
         $pdf = PDF::loadView("ventas.venta.generateTicketPdf", compact('detail','sale','settings','suelto','efectivo'));
-        $pdf->setPaper([0, 0, 226.772, 566.929]); //// Width: 80mm, Height: 297mm
+        $pdf->setPaper([0, 0, 226.772, 566.929]);
         $pdfContent = $pdf->output();
         $base64Pdf = base64_encode($pdfContent);
 
         return response()->json(['pdf' => $base64Pdf]);
-        
     }
     
-     public function exportarVentas()
+    public function exportarVentas()
     {
         return Excel::download(new VentasExport, 'reporte-de-ventas.xlsx');
     }
-
 }
